@@ -46,3 +46,6 @@ app.*.map.json
 
 # Cursor IDE
 .cursor/
+
+# Dependency graphs
+dependency_graph.dot

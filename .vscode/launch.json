@@ -8,7 +8,7 @@
             "name": "typo",
             "request": "launch",
             "type": "dart",
-            "program": "lib/tupo/main.dart"
+            "program": "lib/main.dart"
         },
         {
             "name": "typo (profile mode)",

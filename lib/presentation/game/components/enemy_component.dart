@@ -3,28 +3,31 @@ import 'dart:math' as math;
 import 'package:flame/components.dart';
 import 'package:flame/effects.dart';
 import 'package:flutter/material.dart';
+import 'package:yx_state/yx_state.dart';
 
 import '../../../domain/models/enemy_data.dart';
+import '../../../domain/state/enemies_state.dart';
+import '../../../domain/state/target_state.dart';
 import '../../../domain/state/typing_state.dart';
-import '../../../shared/utils/math_utils.dart';
 import 'colored_text_component.dart';
-import 'enemy_movement.dart';
+import 'state_listener_component.dart';
 
-/// Компонент врага — движется к игроку, имеет слово-метку
+/// Компонент врага — визуальное представление, без бизнес-логики
 class EnemyComponent extends PositionComponent {
+  final String enemyId;
   final EnemyData data;
-  final Vector2 targetPosition;
-  final VoidCallback onReachTarget;
-  final TypingState? Function()? getTypingState;
+  final StateReadable<EnemiesState> enemiesState;
+  final StateReadable<TypingState> typingState;
+  final StateReadable<TargetState> targetState;
 
   EnemyComponent({
+    required this.enemyId,
     required this.data,
-    required Vector2 position,
-    required this.targetPosition,
-    required this.onReachTarget,
-    this.getTypingState,
-  })  : _movement = _createMovement(data.type, position, targetPosition),
-        _bodyPaint = Paint()
+    required Vector2 initialPosition,
+    required this.enemiesState,
+    required this.typingState,
+    required this.targetState,
+  })  : _bodyPaint = Paint()
           ..color = _getColorForType(data.type)
           ..style = PaintingStyle.fill,
         _bodyShadowPaint = Paint()
@@ -35,55 +38,27 @@ class EnemyComponent extends PositionComponent {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3,
         super(
-          position: position,
+          position: initialPosition,
           size: Vector2.all(40),
           anchor: Anchor.center,
         );
 
   static const double _bodyRadius = 18;
-  static const double _collisionRadius = 30;
 
   final Paint _bodyPaint;
   final Paint _bodyShadowPaint;
   final Paint _highlightPaint;
 
   bool _isHighlighted = false;
-  bool _hasReachedTarget = false;
-  bool _isDestroyed = false;
-  final EnemyMovement _movement;
   ColoredTextComponent? _wordLabel;
 
-  /// Создать объект движения на основе типа врага
-  static EnemyMovement _createMovement(
-    EnemyType type,
-    Vector2 startPosition,
-    Vector2 targetPosition,
-  ) {
-    switch (type) {
-      case EnemyType.wavy:
-        return WavyMovement(
-          startPosition: startPosition,
-          targetPosition: targetPosition,
-        );
-      case EnemyType.normal:
-      case EnemyType.fast:
-      case EnemyType.tank:
-      case EnemyType.special:
-        return StraightMovement(
-          startPosition: startPosition,
-          targetPosition: targetPosition,
-        );
-    }
-  }
+  // Эфемерное состояние для анимации смерти
+  bool _deathAnimationStarted = false;
 
   static Color _getColorForType(EnemyType type) {
     switch (type) {
       case EnemyType.normal:
         return const Color(0xFFE8A8A8);
-      case EnemyType.fast:
-        return const Color(0xFFE8C8A8);
-      case EnemyType.tank:
-        return const Color(0xFFD4B8E8);
       case EnemyType.special:
         return const Color(0xFFB8D4D8);
       case EnemyType.wavy:
@@ -93,7 +68,6 @@ class EnemyComponent extends PositionComponent {
 
   @override
   Future<void> onLoad() async {
-    // Создаём текстовую метку со словом
     _wordLabel = ColoredTextComponent(
       fullText: data.word.toUpperCase(),
       typedChars: 0,
@@ -107,10 +81,85 @@ class EnemyComponent extends PositionComponent {
       anchor: Anchor.bottomCenter,
     );
     add(_wordLabel!);
+
+    // Подписка на изменения позиции врага
+    add(StateListenerComponent<EnemiesState>(
+      stateReadable: enemiesState,
+      listenWhen: (prev, curr) {
+        final prevEnemy = prev.activeEnemies[enemyId];
+        final currEnemy = curr.activeEnemies[enemyId];
+        if (prevEnemy == null || currEnemy == null) {
+          return currEnemy != prevEnemy;
+        }
+        return prevEnemy.x != currEnemy.x ||
+            prevEnemy.y != currEnemy.y ||
+            prevEnemy.isDestroyed != currEnemy.isDestroyed ||
+            prevEnemy.hasReachedTarget != currEnemy.hasReachedTarget;
+      },
+      listener: (prev, curr) {
+        final enemy = curr.activeEnemies[enemyId];
+        if (enemy == null || enemy.hasReachedTarget) {
+          removeFromParent();
+          return;
+        }
+
+        position.x = enemy.x;
+        position.y = enemy.y;
+
+        if (enemy.isDestroyed && !_deathAnimationStarted) {
+          _playDeathEffect();
+        }
+      },
+    ));
+
+    // Подписка на изменения цели для автоматического обновления подсветки
+    add(StateListenerComponent<TargetState>(
+      stateReadable: targetState,
+      listenWhen: (prev, curr) {
+        final prevId = prev.maybeWhen(selected: (id, _) => id, orElse: () => null);
+        final currId = curr.maybeWhen(selected: (id, _) => id, orElse: () => null);
+        return prevId != currId;
+      },
+      listener: (_, curr) {
+        final currId = curr.maybeWhen(selected: (id, _) => id, orElse: () => null);
+        _setHighlighted(currId == enemyId);
+      },
+    ));
+
+    // Инициализация подсветки на основе текущего состояния
+    final currentId = targetState.state.maybeWhen(
+      selected: (id, _) => id,
+      orElse: () => null,
+    );
+    _setHighlighted(currentId == enemyId);
+
+    // Подписка на изменения состояния ввода для подсветки букв
+    add(StateListenerComponent<TypingState>(
+      stateReadable: typingState,
+      listenWhen: (prev, curr) => prev.typedChars != curr.typedChars,
+      listener: (prev, curr) {
+        _updateTypedChars(curr);
+      },
+    ));
   }
 
-  /// Установить выделение (прицеливание)
-  void setHighlighted(bool highlighted) {
+  void _updateTypedChars(TypingState state) {
+    if (_wordLabel == null) return;
+
+    final targetWord = targetState.state.maybeWhen(
+      selected: (_, word) => word,
+      orElse: () => null,
+    );
+    if (targetWord != null &&
+        targetWord.toLowerCase() == data.word.toLowerCase()) {
+      _wordLabel!.typedChars = state.typedChars;
+    } else {
+      _wordLabel!.typedChars = 0;
+    }
+  }
+
+  void _setHighlighted(bool highlighted) {
+    if (_isHighlighted == highlighted) return;
     _isHighlighted = highlighted;
 
     final label = _wordLabel;
@@ -125,12 +174,9 @@ class EnemyComponent extends PositionComponent {
     }
   }
 
-  /// Воспроизвести эффект уничтожения
-  void playDeathEffect() {
-    if (_isDestroyed) return;
-    _isDestroyed = true;
+  void _playDeathEffect() {
+    _deathAnimationStarted = true;
 
-    // Эффект масштабирования
     add(
       ScaleEffect.to(
         Vector2.all(1.5),
@@ -138,64 +184,20 @@ class EnemyComponent extends PositionComponent {
       ),
     );
 
-    // Удаление после эффекта
     add(
       RemoveEffect(delay: 0.2),
     );
   }
 
   @override
-  void update(double dt) {
-    super.update(dt);
-
-    // Не обновляем если уже достигли цели или уничтожены
-    if (_hasReachedTarget || _isDestroyed) return;
-
-    // Двигаемся к цели используя систему движения
-    position = _movement.updatePosition(
-      position,
-      targetPosition,
-      data.speed,
-      dt,
-    );
-
-    // Обновляем индикацию ввода если это текущая цель
-    if (_wordLabel != null && getTypingState != null) {
-      final typingState = getTypingState!();
-      if (typingState != null &&
-          typingState.hasTarget &&
-          typingState.targetWord.toLowerCase() == data.word.toLowerCase()) {
-        _wordLabel!.typedChars = typingState.typedChars;
-      } else {
-        _wordLabel!.typedChars = 0;
-      }
-    }
-
-    // Проверяем достижение цели
-    final distance = MathUtils.distanceBetweenPoints(
-      position.x,
-      position.y,
-      targetPosition.x,
-      targetPosition.y,
-    );
-
-    if (distance < _collisionRadius) {
-      _hasReachedTarget = true;
-      onReachTarget();
-    }
-  }
-
-  @override
   void render(Canvas canvas) {
     super.render(canvas);
 
-    // Не рендерим если уничтожен (для эффекта затухания)
-    if (_isDestroyed) return;
+    if (_deathAnimationStarted) return;
 
     final centerX = size.x / 2;
     final centerY = size.y / 2;
 
-    // Рисуем выделение если прицелены (мягкое кольцо)
     if (_isHighlighted) {
       canvas.drawCircle(
         Offset(centerX, centerY),
@@ -204,7 +206,6 @@ class EnemyComponent extends PositionComponent {
       );
     }
 
-    // Рисуем тень
     _drawHexagon(
       canvas,
       Offset(centerX, centerY + 2),
@@ -212,7 +213,6 @@ class EnemyComponent extends PositionComponent {
       _bodyShadowPaint,
     );
 
-    // Рисуем тело врага (мягкий шестиугольник для более геометричного вида)
     _drawHexagon(canvas, Offset(centerX, centerY), _bodyRadius, _bodyPaint);
   }
 

@@ -1,7 +1,8 @@
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
+import 'package:yx_state/yx_state.dart';
 
-import '../tupo_game.dart';
+import '../../../domain/state/player_state.dart';
 import 'state_listener_component.dart';
 
 /// Компонент для визуального эффекта урона
@@ -22,9 +23,13 @@ class _DamageEffectComponent extends Component {
 }
 
 /// Компонент игрока — статичный объект в центре экрана с вращением
-class PlayerComponent extends PositionComponent with HasGameReference<TypoGame> {
-  PlayerComponent({required Vector2 position})
-      : super(
+class PlayerComponent extends PositionComponent {
+  final StateReadable<PlayerState> playerState;
+
+  PlayerComponent({
+    required this.playerState,
+    required Vector2 position,
+  }) : super(
           position: position,
           size: Vector2.all(60),
           anchor: Anchor.center,
@@ -44,20 +49,12 @@ class PlayerComponent extends PositionComponent with HasGameReference<TypoGame> 
     ..color = const Color(0xFF6B8E9F)
     ..style = PaintingStyle.fill;
 
-  /// Текущий угол направления (в радианах)
-  double _angle = 0;
-
-  /// Установить угол направления
-  void setAngle(double angle) {
-    _angle = angle;
-  }
-
   @override
   Future<void> onLoad() async {
     // Используем реактивный компонент для отслеживания урона
     // Фильтруем только изменения health, чтобы не реагировать на другие изменения состояния
-    add(StateListenerComponent(
-      stateReadable: game.gameState,
+    add(StateListenerComponent<PlayerState>(
+      stateReadable: playerState,
       listenWhen: (previous, current) => previous.health != current.health,
       listener: (previous, current) {
         // Запускаем эффект только при уменьшении health (урон)
@@ -84,7 +81,7 @@ class PlayerComponent extends PositionComponent with HasGameReference<TypoGame> 
 
     // Перемещаемся в центр и вращаем
     canvas.translate(centerX, centerY);
-    canvas.rotate(_angle);
+    canvas.rotate(playerState.state.angle);
 
     // Получаем интенсивность эффекта урона из дочернего компонента
     final damageEffects = children.whereType<_DamageEffectComponent>();

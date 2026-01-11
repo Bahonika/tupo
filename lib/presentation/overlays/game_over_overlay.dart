@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:yx_scope_flutter/yx_scope_flutter.dart';
 import 'package:yx_state_flutter/yx_state_flutter.dart';
 
-import '../../data/sources/localization_service.dart';
+import '../../domain/interactors/localization_interactor.dart';
 import '../../di/tupo_scope_container.dart';
 import '../../domain/state/game_state.dart';
 import '../game/tupo_game.dart';

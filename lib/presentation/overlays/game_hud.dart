@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:yx_state_flutter/yx_state_flutter.dart';
 
 import '../../domain/state/game_state.dart';
+import '../../domain/state/player_state.dart';
+import '../../domain/state/target_state.dart';
 import '../../domain/state/typing_state.dart';
 import '../game/tupo_game.dart';
 
@@ -143,17 +145,22 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return StateBuilder<GameState>(
       stateReadable: game.gameState,
-      builder: (context, state, child) {
-        return Row(
-          children: [
-            Expanded(
-              child: _HealthBar(state: state),
-            ),
-            const SizedBox(width: 24),
-            _ScoreDisplay(state: state),
-            const SizedBox(width: 24),
-            _KillCount(state: state),
-          ],
+      builder: (context, gameState, child) {
+        return StateBuilder<PlayerState>(
+          stateReadable: game.playerState,
+          builder: (context, playerState, child) {
+            return Row(
+              children: [
+                Expanded(
+                  child: _HealthBar(playerState: playerState),
+                ),
+                const SizedBox(width: 24),
+                _ScoreDisplay(state: gameState),
+                const SizedBox(width: 24),
+                _KillCount(state: gameState),
+              ],
+            );
+          },
         );
       },
     );
@@ -161,9 +168,9 @@ class _TopBar extends StatelessWidget {
 }
 
 class _HealthBar extends StatelessWidget {
-  final GameState state;
+  final PlayerState playerState;
 
-  const _HealthBar({required this.state});
+  const _HealthBar({required this.playerState});
 
   static Color _getHealthColor(double percent) {
     if (percent > 0.6) return const Color(0xFFA8D5BA);
@@ -181,7 +188,7 @@ class _HealthBar extends StatelessWidget {
             const Icon(Icons.favorite, color: Color(0xFFE8A8A8), size: 20),
             const SizedBox(width: 8),
             Text(
-              '${state.health}/${state.maxHealth}',
+              '${playerState.health}/${playerState.maxHealth}',
               style: const TextStyle(
                 color: Color(0xFF4A6B7A),
                 fontSize: 16,
@@ -199,11 +206,11 @@ class _HealthBar extends StatelessWidget {
           ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,
-            widthFactor: state.healthPercent,
+            widthFactor: playerState.healthPercent,
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: _getHealthColor(state.healthPercent),
+                color: _getHealthColor(playerState.healthPercent),
               ),
             ),
           ),
@@ -282,17 +289,32 @@ class _TypingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StateBuilder<TypingState>(
-      stateReadable: game.typingState,
-      builder: (context, state, child) {
-        if (!state.hasTarget) {
+    return StateBuilder<TargetState>(
+      stateReadable: game.targetState,
+      builder: (context, targetState, child) {
+        if (!targetState.hasTarget) {
           return const SizedBox.shrink();
         }
 
-        return _TypingWordWidget(
-          state: state,
-          onErrorShown: () {
-            game.typingState.clearError();
+        return StateBuilder<TypingState>(
+          stateReadable: game.typingState,
+          builder: (context, typingState, child) {
+            final targetWord = targetState.map(
+              none: (_) => null,
+              selected: (selected) => selected.word,
+            );
+
+            if (targetWord == null) {
+              return const SizedBox.shrink();
+            }
+
+            return _TypingWordWidget(
+              targetWord: targetWord,
+              typingState: typingState,
+              onErrorShown: () {
+                game.typingInteractor.clearError();
+              },
+            );
           },
         );
       },
@@ -301,11 +323,13 @@ class _TypingIndicator extends StatelessWidget {
 }
 
 class _TypingWordWidget extends StatefulWidget {
-  final TypingState state;
+  final String targetWord;
+  final TypingState typingState;
   final VoidCallback onErrorShown;
 
   const _TypingWordWidget({
-    required this.state,
+    required this.targetWord,
+    required this.typingState,
     required this.onErrorShown,
   });
 
@@ -338,8 +362,8 @@ class _TypingWordWidgetState extends State<_TypingWordWidget>
   void didUpdateWidget(_TypingWordWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Если появилась ошибка и анимация не запущена, запускаем мигание
-    if (widget.state.lastError && 
-        !oldWidget.state.lastError && 
+    if (widget.typingState.lastError && 
+        !oldWidget.typingState.lastError && 
         !_isAnimating) {
       _isAnimating = true;
       // Сначала показываем красный цвет
@@ -402,7 +426,15 @@ class _TypingWordWidgetState extends State<_TypingWordWidget>
                     letterSpacing: 4,
                   );
                   
-                  final fullText = (widget.state.typedPart + widget.state.remainingPart).toUpperCase();
+                  final typedChars = widget.typingState.typedChars;
+                  final typedPart = typedChars > 0 && typedChars <= widget.targetWord.length
+                      ? widget.targetWord.substring(0, typedChars)
+                      : '';
+                  final remainingPart = typedChars < widget.targetWord.length
+                      ? widget.targetWord.substring(typedChars)
+                      : '';
+
+                  final fullText = (typedPart + remainingPart).toUpperCase();
                   final textPainter = TextPainter(
                     text: TextSpan(
                       text: fullText,
@@ -418,8 +450,8 @@ class _TypingWordWidgetState extends State<_TypingWordWidget>
                     height: textPainter.height + 10, // Дополнительное место для подчеркивания
                     child: CustomPaint(
                       painter: _TypingTextPainter(
-                        typedPart: widget.state.typedPart,
-                        remainingPart: widget.state.remainingPart,
+                        typedPart: typedPart,
+                        remainingPart: remainingPart,
                         typedColor: Color.lerp(
                           const Color(0xFF7FB89A), // Зеленый
                           const Color(0xFFE8A8A8), // Красный при ошибке

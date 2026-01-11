@@ -49,8 +49,15 @@ class TypoApp extends StatelessWidget {
   }
 }
 
-class GameScreen extends StatelessWidget {
+class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  TypoGame? _game;
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +79,20 @@ class GameScreen extends StatelessWidget {
         ),
       ),
       builder: (context, scope) {
+        // Создаем игру в Presentation слое
+        _game ??= TypoGame(
+          gameState: scope.gameState,
+          typingState: scope.typingState,
+          enemiesState: scope.enemiesState,
+          targetState: scope.targetState,
+          playerState: scope.playerState,
+          interactor: scope.gameInteractor,
+          spawningInteractor: scope.spawningInteractor,
+          gameLoopInteractor: scope.gameLoopInteractor,
+          inputInteractor: scope.inputInteractor,
+          typingInteractor: scope.typingInteractor,
+        );
+
         // Применяем настройку полноэкранного режима при первой загрузке
         // Запускаем фоновую музыку при старте приложения
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -93,7 +114,7 @@ class GameScreen extends StatelessWidget {
           child: Scaffold(
             backgroundColor: const Color(0xFFF5F5F5),
             body: GameWidget<TypoGame>(
-              game: scope.game,
+              game: _game!,
               overlayBuilderMap: {
                 'MainMenu': (context, game) => MainMenu(game: game),
                 'HUD': (context, game) => GameHud(game: game),
@@ -108,13 +129,13 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  static Future<void> _applyFullscreen(bool fullscreen) async {
+  Future<void> _applyFullscreen(bool fullscreen) async {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
       await windowManager.setFullScreen(fullscreen);
     }
   }
 
-  static void _initAudio(TupoScopeContainer scope) {
+  void _initAudio(TupoScopeContainer scope) {
     final audioService = scope.audioService;
     final settings = scope.settingsState.state.settings;
     

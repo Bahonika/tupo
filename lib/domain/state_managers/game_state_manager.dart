@@ -26,11 +26,7 @@ class GameStateManager extends StateManager<GameState>
   /// Начать игру
   Future<void> startGame() => handle((emit) async {
     emit(
-      GameState(
-        health: _config.playerMaxHealth,
-        maxHealth: _config.playerMaxHealth,
-        status: GameStatus.playing,
-      ),
+      const GameState(status: GameStatus.playing),
     );
   });
 
@@ -66,26 +62,9 @@ class GameStateManager extends StateManager<GameState>
     );
   });
 
-  /// Получить урон
-  Future<void> takeDamage(int damage) => handle((emit) async {
-    final newHealth = (state.health - damage).clamp(0, state.maxHealth);
-    final isGameOver = newHealth <= 0;
-
-    emit(
-      state.copyWith(
-        health: newHealth,
-        status: isGameOver ? GameStatus.gameOver : state.status,
-      ),
-    );
-  });
-
-  /// Установить текущую цель (выделенный враг)
-  Future<void> setTarget(String? enemyId) => handle((emit) async {
-    if (enemyId == null) {
-      emit(state.copyWith(clearTarget: true));
-    } else {
-      emit(state.copyWith(targetEnemyId: enemyId));
-    }
+  /// Установить статус game over
+  Future<void> setGameOver() => handle((emit) async {
+    emit(state.copyWith(status: GameStatus.gameOver));
   });
 
   /// Вернуться в меню

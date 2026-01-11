@@ -1,33 +1,18 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:yx_scope_flutter/yx_scope_flutter.dart';
 import 'package:yx_state_flutter/yx_state_flutter.dart';
 
-import '../../data/sources/localization_service.dart';
+import '../../domain/interactors/localization_interactor.dart';
 import '../../di/tupo_scope_container.dart';
 import '../../domain/state/settings_state.dart';
 import '../../shared/models/settings.dart';
 import '../game/tupo_game.dart';
 
-class SettingsOverlay extends StatefulWidget {
+class SettingsOverlay extends StatelessWidget {
   final TypoGame game;
 
   const SettingsOverlay({required this.game, super.key});
-
-  @override
-  State<SettingsOverlay> createState() => _SettingsOverlayState();
-}
-
-class _SettingsOverlayState extends State<SettingsOverlay> {
-  StreamSubscription<SettingsState>? _settingsSubscription;
-
-  @override
-  void dispose() {
-    _settingsSubscription?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,15 +23,6 @@ class _SettingsOverlayState extends State<SettingsOverlay> {
         }
 
         final settingsState = scope.settingsState;
-        final audioService = scope.audioService;
-
-        // Подписка на изменения настроек для обновления AudioService
-        _settingsSubscription?.cancel();
-        _settingsSubscription = settingsState.stream.listen((state) {
-          audioService.setSoundVolume(state.settings.soundVolume);
-          audioService.setMusicVolume(state.settings.musicVolume);
-        });
-
         final localization = scope.localizationService;
 
         return StateBuilder<SettingsState>(
@@ -149,7 +125,7 @@ class _SettingsOverlayState extends State<SettingsOverlay> {
                         // Кнопка закрытия
                         ElevatedButton(
                           onPressed: () {
-                            widget.game.overlays.remove('Settings');
+                            game.overlays.remove('Settings');
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFB8D4D8),
@@ -188,7 +164,7 @@ class _SettingsOverlayState extends State<SettingsOverlay> {
 class _FullscreenSetting extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
-  final LocalizationService localization;
+  final LocalizationInteractor localization;
 
   const _FullscreenSetting({
     required this.value,
@@ -222,7 +198,7 @@ class _FullscreenSetting extends StatelessWidget {
 class _DifficultySetting extends StatelessWidget {
   final Difficulty value;
   final ValueChanged<Difficulty> onChanged;
-  final LocalizationService localization;
+  final LocalizationInteractor localization;
 
   const _DifficultySetting({
     required this.value,
@@ -279,7 +255,7 @@ class _DifficultySetting extends StatelessWidget {
 class _LanguageSetting extends StatelessWidget {
   final Language value;
   final ValueChanged<Language> onChanged;
-  final LocalizationService localization;
+  final LocalizationInteractor localization;
 
   const _LanguageSetting({
     required this.value,

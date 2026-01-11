@@ -33,11 +33,6 @@ class TypingStateManager extends StateManager<TypingState>
     await close();
   }
 
-  /// Установить новое целевое слово
-  Future<void> setTargetWord(String word) => handle((emit) async {
-        emit(TypingState(targetWord: word.toLowerCase()));
-      });
-
   /// Сбросить состояние набора
   Future<void> reset() => handle((emit) async {
         emit(const TypingState());
@@ -45,15 +40,18 @@ class TypingStateManager extends StateManager<TypingState>
 
   /// Обработать введённый символ
   /// Возвращает результат обработки
-  Future<TypingResult> processChar(String char) async {
-    if (!state.hasTarget) {
+  Future<TypingResult> processChar(String char, String targetWord) async {
+    if (targetWord.isEmpty) {
       return TypingResult.noTarget;
     }
 
-    final expectedChar = state.nextExpectedChar;
-    if (expectedChar == null) {
+    final normalizedTargetWord = targetWord.toLowerCase();
+    final expectedCharIndex = state.typedChars;
+    if (expectedCharIndex >= normalizedTargetWord.length) {
       return TypingResult.noTarget;
     }
+
+    final expectedChar = normalizedTargetWord[expectedCharIndex];
 
     // Для пробелов сравниваем как есть, для букв - приводим к нижнему регистру
     final normalizedChar = char == ' ' ? ' ' : char.toLowerCase();
@@ -61,7 +59,7 @@ class TypingStateManager extends StateManager<TypingState>
 
     if (normalizedChar == normalizedExpected) {
       final newTypedChars = state.typedChars + 1;
-      final isComplete = newTypedChars >= state.targetWord.length;
+      final isComplete = newTypedChars >= normalizedTargetWord.length;
 
       await handle((emit) async {
         emit(state.copyWith(

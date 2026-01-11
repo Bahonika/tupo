@@ -1,9 +1,3 @@
-import 'dart:async';
-
-import 'package:yx_scope/yx_scope.dart';
-
-import '../../domain/state/settings_state.dart';
-import '../../domain/state_managers/settings_state_manager.dart';
 import '../../shared/models/settings.dart';
 
 /// Ключи для локализации
@@ -39,21 +33,10 @@ enum LocalizationKey {
   english,
 }
 
-/// Сервис для локализации UI
-class LocalizationService implements AsyncLifecycle {
-  final SettingsStateManager _settingsState;
-
-  StreamSubscription<SettingsState>? _languageSubscription;
-  Language _currentLanguage = Language.russian;
-
-  LocalizationService(this._settingsState);
-
-  /// Текущий язык
-  Language get currentLanguage => _currentLanguage;
-
-  /// Русские переводы
+/// Source для доступа к данным локализации
+class LocalizationSource {
   static const Map<LocalizationKey, String> _russianTranslations = {
-    LocalizationKey.gameTitle: 'TYPO',
+    LocalizationKey.gameTitle: 'TUPO',
     LocalizationKey.gameSubtitle: 'TYPING SHOOTER',
     LocalizationKey.startGame: 'НАЧАТЬ ИГРУ',
     LocalizationKey.settings: 'НАСТРОЙКИ',
@@ -84,9 +67,8 @@ class LocalizationService implements AsyncLifecycle {
     LocalizationKey.english: 'English',
   };
 
-  /// Английские переводы
   static const Map<LocalizationKey, String> _englishTranslations = {
-    LocalizationKey.gameTitle: 'TYPO',
+    LocalizationKey.gameTitle: 'TUPO',
     LocalizationKey.gameSubtitle: 'TYPING SHOOTER',
     LocalizationKey.startGame: 'START GAME',
     LocalizationKey.settings: 'SETTINGS',
@@ -117,25 +99,9 @@ class LocalizationService implements AsyncLifecycle {
     LocalizationKey.english: 'English',
   };
 
-  @override
-  Future<void> init() async {
-    // Устанавливаем текущий язык из настроек
-    _currentLanguage = _settingsState.state.settings.language;
-
-    // Подписываемся на изменения языка
-    _languageSubscription = _settingsState.stream.listen((state) {
-      _currentLanguage = state.settings.language;
-    });
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _languageSubscription?.cancel();
-  }
-
-  /// Получить перевод для ключа
-  String translate(LocalizationKey key) {
-    switch (_currentLanguage) {
+  /// Получить перевод для ключа на указанном языке
+  String translate(LocalizationKey key, Language language) {
+    switch (language) {
       case Language.russian:
         return _russianTranslations[key] ?? key.toString();
       case Language.english:
